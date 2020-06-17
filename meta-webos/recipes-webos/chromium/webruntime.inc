@@ -14,10 +14,10 @@ require gn-utils.inc
 
 inherit gettext
 inherit webruntime_apps
-inherit webos_enhanced_submissions
+#inherit webos_enhanced_submissions
 inherit webos_filesystem_paths
 inherit webos_lttng
-inherit webos_machine_dep
+#inherit webos_machine_dep
 inherit webos_machine_impl_dep
 inherit webos_prerelease_dep
 inherit webos_system_bus
@@ -56,6 +56,7 @@ WEBOS_REPO_NAME_V8 ?= "v8"
 SRC_URI = "\
     ${WEBOSOSE_GIT_REPO_COMPLETE};name=main \
     ${WEBOSOSE_GIT_REPO}/${WEBOS_REPO_NAME_V8};destsuffix=git/src/v8${WEBOS_GIT_BRANCH_V8};name=v8${WEBOSOSE_GIT_PROTOCOL} \
+    file://0001-GCC-fix-includes-for-gcc-10.patch \
 "
 
 ## we don't include SRCPV in PV, so we have to manually include SRCREVs in do_fetch vardeps
@@ -89,7 +90,7 @@ WEBOS_SYSTEM_BUS_FILES_LOCATION = "${S}/files/sysbus"
 WEBOS_SYSTEM_BUS_MANIFEST_TYPE = "PASS"
 
 PACKAGECONFIG ?= "jumbo neva-media"
-PACKAGECONFIG_append_hardware = " gstreamer umediaserver gav"
+#PACKAGECONFIG_append_hardware = " gstreamer umediaserver gav"
 PACKAGECONFIG[gstreamer] = "use_gst_media=true enable_webm_video_codecs=false,use_gst_media=false,g-media-pipeline"
 PACKAGECONFIG[umediaserver] = ",,umediaserver"
 # Options to enable debug build. Add this PACKAGECONFIG to webos-local.conf to enable debug build
@@ -100,6 +101,7 @@ PACKAGECONFIG[compress-debuginfo] = "compress_debug_info=true,compress_debug_inf
 PACKAGECONFIG[neva-media] = "use_neva_media=true, use_neva_media=false"
 PACKAGECONFIG[av1-codec] = "enable_av1_decoder=true, enable_av1_decoder=false"
 PACKAGECONFIG[gav] = "use_gav=true,use_gav=false"
+
 
 # Set a default value for jumbo file merge of 8. This should be good for build
 # servers and workstations with a big number of cores. In case build is
@@ -185,6 +187,7 @@ GN_ARGS += "${EXTRA_OEGN_GOLD}"
 
 GN_ARGS_append_arm = " target_cpu=\"arm\""
 GN_ARGS_append_qemux86 = " target_cpu=\"x86\""
+GN_ARGS_append_qemux86-64 = " target_cpu=\"x64\""
 GN_ARGS_append_aarch64 = " target_cpu=\"arm64\""
 
 # ARM builds need special additional flags (see ${S}/build/config/arm.gni).
@@ -311,6 +314,7 @@ install_ls2_roles_acg() {
     install -v -m 0644 ${WEBOS_SYSTEM_BUS_FILES_LOCATION}/$1.role.json ${D}${webos_sysbus_rolesdir}/$1.role.json
 }
 
+
 install_app_shell() {
     A_DIR=${D}${APP_SHELL_RUNTIME_DIR}
     install -d ${A_DIR}
@@ -330,9 +334,13 @@ install_app_shell() {
     # run_appshell: Script file for launching chromium
     chmod -v 755 ${A_DIR}/app_shell
     chmod -v 755 ${A_DIR}/run_app_shell
+    chown root:root ${A_DIR}/app_shell
+    chown root:root ${A_DIR}/run_app_shell
+    chown root:root ${A_DIR}/snapshot_blob.bin
 }
 
-install_app_shell_append_webos() {
+#We don't identify as webOS so need to have the variant without webos here.
+install_app_shell_append() {
     install_ls2_roles_acg ${APP_SHELL_RUNTIME}
 }
 
@@ -349,7 +357,31 @@ install_chromium_manifest() {
 MKSNAPSHOT_PATH = ""
 MKSNAPSHOT_PATH_arm = "clang_x86_v8_arm/"
 MKSNAPSHOT_PATH_aarch64 = "clang_x64_v8_arm64/"
+
+MKSNAPSHOT_PATH_qemux86 = "host/"
+MKSNAPSHOT_PATH_qemux86-64 = "host/"
+
 LTTNG_PROVIDER = "liblttng_provider.so"
+
+GN_ARGS_append_qemux86 = "\
+    is_host_clang=false\
+    v8_snapshot_toolchain=\"//build/toolchain/cros:host\" \
+    host_toolchain=\"//build/toolchain/cros:host\" \
+    use_custom_libcxx=false \
+    use_custom_libcxx_for_host=false \
+    v8_enable_embedded_builtins=false \
+"
+
+# But for x86-64 previous setting fails in torque, so this makes build use
+# gcc on host, and use host toolchain for v8 snapshot and torque
+GN_ARGS_append_qemux86-64 = "\
+    is_host_clang=false\
+    v8_snapshot_toolchain=\"//build/toolchain/cros:host\" \
+    host_toolchain=\"//build/toolchain/cros:host\" \
+    use_custom_libcxx=false \
+    use_custom_libcxx_for_host=false \
+    v8_enable_embedded_builtins=false \
+"
 
 install_webruntime() {
     install -d ${D}${libdir}
@@ -504,6 +536,8 @@ INSANE_SKIP_${MLPREFIX}${BROWSER_APPLICATION} += "libdir ldflags textrel"
 INSANE_SKIP_${MLPREFIX}${APP_SHELL_RUNTIME} += "libdir ldflags textrel"
 INSANE_SKIP_${MLPREFIX}${CHROMEDRIVER_RUNTIME} += "libdir ldflags textrel"
 INSANE_SKIP_${MLPREFIX}${WAM_DEMO_APPLICATION} += "libdir ldflags textrel"
+
+INSANE_SKIP_${PN} += "host-user-contaminated"
 
 FILES_${PN} = " \
     ${libdir}/*.so \
